@@ -1,8 +1,8 @@
 # DS4420 Final Project - Predicting National Renewable Energy Adoption
 
 Predicting and analyzing renewable energy adoption across countries using three
-independent models: a manual neural network (Python), Bayesian regression (R),
-and ARIMA time series forecasting (R)
+independent models: a manual MLP neural network, Bayesian regression,
+and ARIMA time series
 
 ---
 
@@ -64,7 +64,8 @@ energy features. Implemented manually with NumPy
 
 ## Data
 
-**Source:** Our World in Data — [World Energy Consumption](https://www.kaggle.com/datasets/pralabhpoudel/world-energy-consumption?resource=download)
+**Source:** Our World in Data - [World Energy Consumption](https://www.kaggle.com/datasets/pralabhpoudel/world-energy-consumption?resource=download)
 
-The dataset covers 200+ countries from 1900–2022 across 129 energy variables.
+The dataset covers 200+ countries from 1900–2022 across 129 energy variables
+
 
