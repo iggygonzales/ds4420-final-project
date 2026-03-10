@@ -45,7 +45,7 @@ python python/mlp_poc.py
 
 ### Model 1 — MLP Neural Network 
 
-Predicts each country's renewable electricity share (2020) from economic and
+Predicts each country's renewable electricity share from economic and
 energy features. Implemented manually with NumPy 
 
 - **Input:** 11 features (population, energy per capita, fossil/coal/gas share, etc.)
@@ -67,5 +67,6 @@ energy features. Implemented manually with NumPy
 **Source:** Our World in Data - [World Energy Consumption](https://www.kaggle.com/datasets/pralabhpoudel/world-energy-consumption?resource=download)
 
 The dataset covers 200+ countries from 1900–2022 across 129 energy variables
+
 
 
