@@ -1,0 +1,209 @@
+---
+title: "Model3_Bayes_Renewable_Energy1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+# load packages
+library(brms)
+library(ggplot2)
+
+# set seed
+set.seed(42)
+
+# set cores
+options(mc.cores = parallel::detectCores())
+
+# set path
+data_path <- "ds4420-final-project/data/World_Energy_Consumption.csv"
+
+# set model constants
+year_use <- 2018
+target <- "renewables_share_energy"
+features <- c(
+  "gas_share_elec",
+  "fossil_elec_per_capita",
+  "coal_share_energy",
+  "energy_per_gdp",
+  "energy_per_capita"
+)
+
+```
+
+
+```{r}
+
+# read data
+energy <- read.csv(data_path)
+
+# keep 2018 sovereign countries
+energy_2018 <- energy[
+  energy$year == year_use &
+    !is.na(energy$iso_code) &
+    nchar(energy$iso_code) == 3,
+]
+
+# keep needed columns
+energy_2018 <- energy_2018[, c("country", "iso_code", features, target)]
+
+# drop missing rows
+energy_2018 <- na.omit(energy_2018)
+
+# reset row names
+rownames(energy_2018) <- NULL
+
+# print checks
+cat("year:", year_use, "\n")
+cat("countries with complete data:", nrow(energy_2018), "\n")
+cat("features:\n")
+print(features)
+cat("target:", target, "\n")
+
+# preview data
+head(energy_2018)
+
+```
+
+
+```{r}
+
+# check dimensions
+dim(energy_2018)
+
+# check country count
+length(unique(energy_2018$country))
+
+# check missing values
+colSums(is.na(energy_2018))
+
+# check target summary
+summary(energy_2018[[target]])
+sd(energy_2018[[target]])
+
+```
+
+
+```{r}
+
+# make scaled copy
+energy_scaled <- energy_2018
+
+# scale predictors
+energy_scaled[, features] <- scale(energy_2018[, features])
+
+# preview scaled data
+head(energy_scaled)
+
+# check scaled predictor means
+round(colMeans(energy_scaled[, features]), 6)
+
+# check scaled predictor sds
+apply(energy_scaled[, features], 2, sd)
+
+```
+
+
+```{r}
+
+# define formula
+energy_formula <- renewables_share_energy ~
+  gas_share_elec +
+  fossil_elec_per_capita +
+  coal_share_energy +
+  energy_per_gdp +
+  energy_per_capita
+
+# inspect default priors
+energy_prior <- default_prior(
+  energy_formula,
+  data = energy_scaled,
+  family = gaussian()
+)
+
+energy_prior
+
+```
+
+
+```{r}
+
+# fit gaussian bayesian linear regression
+energy_brm <- brm(
+  energy_formula,
+  family = gaussian(),
+  data = energy_scaled,
+  chains = 4,
+  cores = getOption("mc.cores", 1),
+  iter = 1000,
+  warmup = 180,
+  thin = 2,
+  prior = energy_prior
+)
+
+```
+
+
+```{r}
+
+# print summary
+summary(energy_brm)
+
+# plot chains and posteriors
+plot(energy_brm)
+
+# get bayesian r squared
+bayes_R2(energy_brm)
+
+```
+
+
+```{r}
+
+# get posterior predictive draws
+post_preds <- posterior_predict(energy_brm)
+
+# get posterior predictive means
+energy_2018$bayes_pred_mean <- colMeans(post_preds)
+
+# get residuals
+energy_2018$bayes_residual <- energy_2018[[target]] - energy_2018$bayes_pred_mean
+
+# get absolute residuals
+energy_2018$abs_bayes_residual <- abs(energy_2018$bayes_residual)
+
+# sort by residual
+energy_results <- energy_2018[order(energy_2018$bayes_residual, decreasing = TRUE), ]
+
+# preview results
+head(energy_results[, c("country", target, "bayes_pred_mean", "bayes_residual")], 10)
+
+# preview bottom results
+tail(energy_results[, c("country", target, "bayes_pred_mean", "bayes_residual")], 10)
+
+```
+
+
+```{r}
+
+# plot posterior predictive means vs actual
+plot(
+  energy_2018$bayes_pred_mean,
+  energy_2018[[target]],
+  main = "posterior predictive means vs actual",
+  xlab = "posterior predictive mean",
+  ylab = "actual renewables share"
+)
+
+abline(0, 1, col = "red", lwd = 2)
+
+# check correlation
+cor(energy_2018$bayes_pred_mean, energy_2018[[target]])
+
+```
+
