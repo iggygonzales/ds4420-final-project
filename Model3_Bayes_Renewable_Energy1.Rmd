@@ -7,7 +7,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
+# Default Baseline Model
 ```{r}
 
 # load packages
@@ -21,7 +21,7 @@ set.seed(42)
 options(mc.cores = parallel::detectCores())
 
 # set path
-data_path <- "ds4420-final-project/data/World_Energy_Consumption.csv"
+data_path <- "data/World_Energy_Consumption.csv"
 
 # set model constants
 year_use <- 2018
@@ -142,7 +142,7 @@ energy_brm <- brm(
   cores = getOption("mc.cores", 1),
   iter = 1000,
   warmup = 180,
-  thin = 2,
+  thin = 1,
   prior = energy_prior
 )
 
@@ -180,10 +180,10 @@ energy_2018$abs_bayes_residual <- abs(energy_2018$bayes_residual)
 # sort by residual
 energy_results <- energy_2018[order(energy_2018$bayes_residual, decreasing = TRUE), ]
 
-# preview results
+# preview top residuals
 head(energy_results[, c("country", target, "bayes_pred_mean", "bayes_residual")], 10)
 
-# preview bottom results
+# preview bottom residuals
 tail(energy_results[, c("country", target, "bayes_pred_mean", "bayes_residual")], 10)
 
 ```
@@ -207,3 +207,392 @@ cor(energy_2018$bayes_pred_mean, energy_2018[[target]])
 
 ```
 
+
+# Adding manual priors
+```{r}
+
+# get target mean for intercept prior
+target_mean <- mean(energy_2018[[target]])
+target_mean
+
+```
+
+
+```{r}
+
+# define manual priors
+manual_prior <- c(
+  prior(student_t(3, 14.367, 10), class = "Intercept"),
+  prior(normal(0, 5), class = "b", coef = "gas_share_elec"),
+  prior(normal(0, 5), class = "b", coef = "fossil_elec_per_capita"),
+  prior(normal(0, 5), class = "b", coef = "coal_share_energy"),
+  prior(normal(0, 5), class = "b", coef = "energy_per_gdp"),
+  prior(normal(0, 5), class = "b", coef = "energy_per_capita"),
+  prior(student_t(3, 0, 10), class = "sigma")
+)
+
+```
+
+
+```{r}
+
+# fit manual prior model
+energy_brm_manual <- brm(
+  energy_formula,
+  family = gaussian(),
+  data = energy_scaled,
+  chains = 4,
+  cores = getOption("mc.cores", 1),
+  iter = 4000,
+  warmup = 720,
+  thin = 1,
+  prior = manual_prior
+)
+
+```
+
+
+```{r}
+
+# check summary
+summary(energy_brm_manual)
+
+# check chains and posteriors
+plot(energy_brm_manual)
+
+# check bayesian r squared
+bayes_R2(energy_brm_manual)
+
+```
+
+
+```{r}
+
+# get posterior predictive draws
+post_preds_manual <- posterior_predict(energy_brm_manual)
+
+# get posterior predictive means
+energy_2018$bayes_pred_mean_manual <- colMeans(post_preds_manual)
+
+# get residuals
+energy_2018$bayes_residual_manual <- energy_2018[[target]] - energy_2018$bayes_pred_mean_manual
+
+# get absolute residuals
+energy_2018$abs_bayes_residual_manual <- abs(energy_2018$bayes_residual_manual)
+
+# sort by residual
+energy_results_manual <- energy_2018[order(energy_2018$bayes_residual_manual, decreasing = TRUE), ]
+
+# preview top residuals
+head(
+  energy_results_manual[, c("country", target, "bayes_pred_mean_manual", "bayes_residual_manual")], 10)
+
+# preview bottom residuals
+tail(energy_results_manual[, c("country", target, "bayes_pred_mean_manual", "bayes_residual_manual")], 10)
+
+```
+
+
+```{r}
+
+# plot posterior predictive means vs actual
+plot(
+  energy_2018$bayes_pred_mean_manual,
+  energy_2018[[target]],
+  main = "manual prior posterior predictive means vs actual",
+  xlab = "posterior predictive mean",
+  ylab = "actual renewables share"
+)
+
+abline(0, 1, col = "red", lwd = 2)
+
+# check correlation
+cor(energy_2018$bayes_pred_mean_manual, energy_2018[[target]])
+
+```
+
+
+```{r}
+
+# compare bayesian r squared
+bayes_R2(energy_brm)
+bayes_R2(energy_brm_manual)
+
+# compare coefficient summaries
+summary(energy_brm)
+summary(energy_brm_manual)
+
+```
+
+The default-prior and manual-prior models told the same overall story, which is reassuring: the main coefficient directions were stable, the same broad countries remained over and under-predicted, and the posterior diagnostics improved with the longer manual-prior run. Although the manual-prior model had a slightly lower Bayesian R2 than the default-prior version, it gave a more disciplined Bayesian specification by replacing flat coefficient priors with weakly informative Normal priors and produced cleaner posterior interpretation. In particular, the manual-prior fit reduced uncertainty enough that fossil_elec_per_capita became credibly negative and energy_per_capita became credibly positive, while gas_share_elec and coal_share_energy remained clearly negative and energy_per_gdp remained uncertain. Because the manual-prior specification improves interpretability without changing the overall substantive conclusions, we move forward with it as our primary Bayesian model.
+
+# Cross Validation
+```{r}
+
+# set cv constants
+k_folds <- 5
+cv_iter <- 4000
+cv_warmup <- 720
+cv_thin <- 1
+
+```
+
+
+```{r}
+
+# create target tiers
+bins <- c(0, 5, 15, 30, 100)
+labels <- c("very_low", "low", "medium", "high")
+
+# add tiers
+energy_2018$tier <- cut(energy_2018[[target]], breaks = bins, labels = labels, include.lowest = TRUE)
+
+# check tier counts
+tier_counts <- table(energy_2018$tier)
+tier_counts
+
+```
+
+
+```{r}
+
+# set seed
+set.seed(42)
+
+# initialize fold vector
+fold_assignments <- rep(NA_integer_, nrow(energy_2018))
+
+# assign folds within each tier
+for (tier_label in levels(energy_2018$tier)) {
+  tier_idx <- which(energy_2018$tier == tier_label)
+  tier_idx <- sample(tier_idx)
+  
+  for (i in seq_along(tier_idx)) {
+    fold_assignments[tier_idx[i]] <- (i - 1) %% k_folds + 1
+  }
+}
+
+# store folds
+energy_2018$fold <- fold_assignments
+
+# check fold balance
+table(energy_2018$tier, energy_2018$fold)
+
+```
+
+
+```{r}
+
+# define fold fit function
+fit_bayes_fold <- function(train_data, test_data, target, features, iter, warmup, thin) {
+  
+  # make scaled copies
+  train_scaled <- train_data
+  test_scaled <- test_data
+  
+  # scale predictors using train fold only
+  train_means <- sapply(train_data[, features], mean)
+  train_sds <- sapply(train_data[, features], sd)
+  
+  for (feat in features) {
+    train_scaled[[feat]] <- (train_data[[feat]] - train_means[feat]) / train_sds[feat]
+    test_scaled[[feat]] <- (test_data[[feat]] - train_means[feat]) / train_sds[feat]
+  }
+  
+  # get train target mean
+  train_target_mean <- mean(train_scaled[[target]])
+  
+  # define manual priors
+  fold_prior <- c(
+    prior(student_t(3, 14.367, 10), class = "Intercept"),
+    prior(normal(0, 5), class = "b", coef = "gas_share_elec"),
+    prior(normal(0, 5), class = "b", coef = "fossil_elec_per_capita"),
+    prior(normal(0, 5), class = "b", coef = "coal_share_energy"),
+    prior(normal(0, 5), class = "b", coef = "energy_per_gdp"),
+    prior(normal(0, 5), class = "b", coef = "energy_per_capita"),
+    prior(student_t(3, 0, 10), class = "sigma")
+)
+  
+  
+  # fit model
+  fold_model <- brm(
+    energy_formula,
+    family = gaussian(),
+    data = train_scaled,
+    chains = 4,
+    cores = getOption("mc.cores", 1),
+    iter = iter,
+    warmup = warmup,
+    thin = thin,
+    prior = fold_prior,
+    refresh = 0
+  )
+  
+  # get posterior expected draws for test fold
+  fold_epred <- posterior_epred(fold_model, newdata = test_scaled)
+
+  # get posterior expected means
+  fold_pred_mean <- colMeans(fold_epred)
+  
+  # return outputs
+  list(
+    model = fold_model,
+    pred_mean = fold_pred_mean,
+    y_true = test_scaled[[target]]
+  )
+}
+
+```
+
+
+```{r}
+
+# initialize storage
+cv_results <- list()
+cv_metrics <- data.frame(
+  fold = integer(),
+  rmse = numeric(),
+  r2 = numeric()
+)
+
+# initialize oof predictions
+energy_2018$cv_bayes_pred <- NA_real_
+
+# run cv
+cat("running", k_folds, "fold cross-validation...\n\n")
+cat(sprintf("%-6s %-16s %-12s\n", "Fold", "Val RMSE (pp)", "Val R2"))
+
+for (fold in 1:k_folds) {
+  
+  # split data
+  train_data <- energy_2018[energy_2018$fold != fold, ]
+  test_data <- energy_2018[energy_2018$fold == fold, ]
+  
+  # fit fold model
+  fold_out <- fit_bayes_fold(
+    train_data = train_data,
+    test_data = test_data,
+    target = target,
+    features = features,
+    iter = cv_iter,
+    warmup = cv_warmup,
+    thin = cv_thin
+  )
+  
+  # get predictions
+  y_pred <- fold_out$pred_mean
+  y_true <- fold_out$y_true
+  
+  # get fold metrics
+  fold_rmse <- sqrt(mean((y_pred - y_true)^2))
+  fold_r2 <- 1 - sum((y_true - y_pred)^2) / sum((y_true - mean(y_true))^2)
+  
+  # store metrics
+  cv_metrics <- rbind(
+    cv_metrics,
+    data.frame(
+      fold = fold,
+      rmse = fold_rmse,
+      r2 = fold_r2
+    )
+  )
+  
+  # store oof predictions
+  energy_2018$cv_bayes_pred[energy_2018$fold == fold] <- y_pred
+  
+  # store model object if needed
+  cv_results[[paste0("fold_", fold)]] <- fold_out
+  
+  # print fold summary
+  cat(sprintf("%-6d %-16.3f %-12.4f\n", fold, fold_rmse, fold_r2))
+}
+
+cat(sprintf("%-6s %-16.3f %-12.4f\n", "Mean", mean(cv_metrics$rmse), mean(cv_metrics$r2)))
+cat(sprintf("%-6s %-16.3f %-12.4f\n", "Std", sd(cv_metrics$rmse), sd(cv_metrics$r2)))
+
+```
+
+
+```{r}
+
+# print final summary
+cat("cross-validated rmse:", round(mean(cv_metrics$rmse), 2), "+/-", round(sd(cv_metrics$rmse), 2), "percentage points\n")
+cat("cross-validated r2:", round(mean(cv_metrics$r2), 3), "+/-", round(sd(cv_metrics$r2), 3))
+
+```
+
+
+```{r}
+
+# get oof residuals
+energy_2018$cv_bayes_residual <- energy_2018[[target]] - energy_2018$cv_bayes_pred
+
+# get absolute residuals
+energy_2018$cv_abs_bayes_residual <- abs(energy_2018$cv_bayes_residual)
+
+# sort results
+cv_energy_results <- energy_2018[order(energy_2018$cv_bayes_residual, decreasing = TRUE), ]
+
+# preview top residuals
+head(
+  cv_energy_results[, c("country", target, "cv_bayes_pred", "cv_bayes_residual")],
+  10
+)
+
+# preview bottom residuals
+tail(
+  cv_energy_results[, c("country", target, "cv_bayes_pred", "cv_bayes_residual")],
+  10
+)
+
+```
+
+
+```{r}
+
+# plot cv posterior predictive means vs actual
+plot(
+  energy_2018$cv_bayes_pred,
+  energy_2018[[target]],
+  main = "cv posterior predictive means vs actual",
+  xlab = "cv posterior predictive mean",
+  ylab = "actual renewables share"
+)
+
+# add reference line
+abline(0, 1, col = "red", lwd = 2)
+
+# check correlation
+cor(energy_2018$cv_bayes_pred, energy_2018[[target]])
+
+```
+We move forward with this Bayesian model because it gives us strong out-of-sample performance while still being easy to interpret. Its cross-validated results are essentially the same as the MLP’s, which suggests the current five predictors already capture most of the predictive signal available in this setup. Because the Bayesian model matches the MLP so closely without adding extra functional complexity, we keep the simpler specification as our primary Bayesian model.
+
+
+
+```{r}
+
+
+
+```
+
+
+```{r}
+
+
+
+```
+
+
+```{r}
+
+
+
+```
+
+
+```{r}
+
+
+
+```
