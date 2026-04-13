@@ -572,27 +572,325 @@ We move forward with this Bayesian model because it gives us strong out-of-sampl
 
 ```{r}
 
+# print fold metrics
+cv_metrics
 
-
-```
-
-
-```{r}
-
-
-
-```
-
-
-```{r}
-
-
+# print mean and sd
+data.frame(
+  metric = c("rmse", "r2"),
+  mean = c(mean(cv_metrics$rmse), mean(cv_metrics$r2)),
+  sd = c(sd(cv_metrics$rmse), sd(cv_metrics$r2))
+)
 
 ```
 
 
 ```{r}
 
+# set layout
+par(mfrow = c(1, 2))
 
+# plot rmse by fold
+barplot(
+  cv_metrics$rmse,
+  names.arg = cv_metrics$fold,
+  main = "cv rmse by fold",
+  xlab = "fold",
+  ylab = "rmse (percentage points)",
+  col = "steelblue"
+)
+
+abline(h = mean(cv_metrics$rmse), col = "red", lwd = 2, lty = 2)
+
+# plot r2 by fold
+barplot(
+  cv_metrics$r2,
+  names.arg = cv_metrics$fold,
+  main = "cv r2 by fold",
+  xlab = "fold",
+  ylab = "r2",
+  col = "steelblue"
+)
+
+abline(h = mean(cv_metrics$r2), col = "red", lwd = 2, lty = 2)
+
+# reset layout
+par(mfrow = c(1, 1))
+
+```
+
+
+```{r}
+
+# get top and bottom residuals
+top10_cv <- head(cv_energy_results, 10)
+bot10_cv <- tail(cv_energy_results, 10)
+
+# combine and sort
+cv_bar_data <- rbind(top10_cv, bot10_cv)
+cv_bar_data <- cv_bar_data[order(cv_bar_data$cv_bayes_residual), ]
+
+# set colors
+bar_colors <- ifelse(cv_bar_data$cv_bayes_residual > 0, "seagreen", "tomato")
+
+# plot residual bar chart
+barplot(
+  cv_bar_data$cv_bayes_residual,
+  names.arg = cv_bar_data$country,
+  horiz = TRUE,
+  las = 1,
+  col = bar_colors,
+  main = "top over- and under-performers",
+  xlab = "actual - predicted (percentage points)"
+)
+
+abline(v = 0, lwd = 1)
+
+```
+
+
+```{r}
+
+# plot residual distribution
+hist(
+  energy_2018$cv_bayes_residual,
+  breaks = 18,
+  col = "steelblue",
+  main = "cv residual distribution",
+  xlab = "residual (percentage points)"
+)
+
+abline(v = 0, col = "red", lwd = 2, lty = 2)
+
+```
+
+
+```{r}
+
+# get posterior summaries
+coef_summary <- posterior_summary(
+  energy_brm_manual,
+  pars = c(
+    "b_gas_share_elec",
+    "b_fossil_elec_per_capita",
+    "b_coal_share_energy",
+    "b_energy_per_gdp",
+    "b_energy_per_capita"
+  ),
+  probs = c(0.025, 0.975)
+)
+
+# make data frame
+coef_df <- data.frame(
+  term = c(
+    "gas_share_elec",
+    "fossil_elec_per_capita",
+    "coal_share_energy",
+    "energy_per_gdp",
+    "energy_per_capita"
+  ),
+  estimate = coef_summary[, "Estimate"],
+  lower = coef_summary[, "Q2.5"],
+  upper = coef_summary[, "Q97.5"]
+)
+
+# order terms
+coef_df <- coef_df[order(coef_df$estimate), ]
+
+# plot intervals
+plot(
+  coef_df$estimate,
+  seq_along(coef_df$term),
+  xlim = range(c(coef_df$lower, coef_df$upper)),
+  yaxt = "n",
+  ylab = "",
+  xlab = "posterior estimate",
+  main = "coefficient credible intervals",
+  pch = 19
+)
+
+axis(2, at = seq_along(coef_df$term), labels = coef_df$term, las = 1)
+
+segments(
+  x0 = coef_df$lower,
+  y0 = seq_along(coef_df$term),
+  x1 = coef_df$upper,
+  y1 = seq_along(coef_df$term),
+  lwd = 2
+)
+
+abline(v = 0, col = "red", lwd = 2, lty = 2)
+
+```
+
+
+```{r}
+
+# get posterior draws for coefficients
+post_draws <- as.data.frame(energy_brm_manual)
+
+# build coefficient table
+coef_table <- data.frame(
+  term = c(
+    "gas_share_elec",
+    "fossil_elec_per_capita",
+    "coal_share_energy",
+    "energy_per_gdp",
+    "energy_per_capita"
+  ),
+  estimate = c(
+    mean(post_draws$b_gas_share_elec),
+    mean(post_draws$b_fossil_elec_per_capita),
+    mean(post_draws$b_coal_share_energy),
+    mean(post_draws$b_energy_per_gdp),
+    mean(post_draws$b_energy_per_capita)
+  ),
+  lower_95 = c(
+    quantile(post_draws$b_gas_share_elec, 0.025),
+    quantile(post_draws$b_fossil_elec_per_capita, 0.025),
+    quantile(post_draws$b_coal_share_energy, 0.025),
+    quantile(post_draws$b_energy_per_gdp, 0.025),
+    quantile(post_draws$b_energy_per_capita, 0.025)
+  ),
+  upper_95 = c(
+    quantile(post_draws$b_gas_share_elec, 0.975),
+    quantile(post_draws$b_fossil_elec_per_capita, 0.975),
+    quantile(post_draws$b_coal_share_energy, 0.975),
+    quantile(post_draws$b_energy_per_gdp, 0.975),
+    quantile(post_draws$b_energy_per_capita, 0.975)
+  ),
+  prob_positive = c(
+    mean(post_draws$b_gas_share_elec > 0),
+    mean(post_draws$b_fossil_elec_per_capita > 0),
+    mean(post_draws$b_coal_share_energy > 0),
+    mean(post_draws$b_energy_per_gdp > 0),
+    mean(post_draws$b_energy_per_capita > 0)
+  ),
+  prob_negative = c(
+    mean(post_draws$b_gas_share_elec < 0),
+    mean(post_draws$b_fossil_elec_per_capita < 0),
+    mean(post_draws$b_coal_share_energy < 0),
+    mean(post_draws$b_energy_per_gdp < 0),
+    mean(post_draws$b_energy_per_capita < 0)
+  )
+)
+
+coef_table
+
+```
+
+
+```{r}
+
+# get posterior expected draws for all countries from full manual-prior model
+country_epred <- posterior_epred(energy_brm_manual, newdata = energy_scaled)
+
+# build prediction interval table
+country_pred_table <- data.frame(
+  country = energy_2018$country,
+  actual = energy_2018[[target]],
+  pred_mean = colMeans(country_epred),
+  pred_lower_95 = apply(country_epred, 2, quantile, 0.025),
+  pred_upper_95 = apply(country_epred, 2, quantile, 0.975)
+)
+
+# show selected countries
+country_pred_table[country_pred_table$country %in% c(
+  "Norway", "Brazil", "New Zealand", "Luxembourg", "France", "Hong Kong"
+), ]
+
+```
+
+
+```{r}
+
+# get posterior predictive draws for all countries
+country_post_pred <- posterior_predict(energy_brm_manual, newdata = energy_scaled)
+
+# residual draws
+residual_draws <- sweep(country_post_pred, 2, energy_2018[[target]], FUN = "-")
+residual_draws <- -residual_draws
+
+# build residual probability table
+country_resid_table <- data.frame(
+  country = energy_2018$country,
+  actual = energy_2018[[target]],
+  pred_mean = colMeans(country_post_pred),
+  resid_mean = colMeans(residual_draws),
+  resid_lower_95 = apply(residual_draws, 2, quantile, 0.025),
+  resid_upper_95 = apply(residual_draws, 2, quantile, 0.975),
+  prob_overperform = colMeans(residual_draws > 0),
+  prob_underperform = colMeans(residual_draws < 0)
+)
+
+# sort by posterior mean residual
+country_resid_table <- country_resid_table[order(country_resid_table$resid_mean, decreasing = TRUE), ]
+
+# preview top and bottom
+head(country_resid_table, 10)
+tail(country_resid_table, 10)
+
+```
+
+
+```{r}
+
+# select top and bottom countries by residual mean
+plot_data <- rbind(
+  head(country_resid_table, 5),
+  tail(country_resid_table, 5)
+)
+
+# order for plotting
+plot_data <- plot_data[order(plot_data$prob_overperform), ]
+
+# plot posterior probability of over-performance
+barplot(
+  plot_data$prob_overperform,
+  names.arg = plot_data$country,
+  horiz = TRUE,
+  las = 1,
+  xlim = c(0, 1),
+  col = "steelblue",
+  main = "posterior probability of over-performance",
+  xlab = "probability actual > predicted"
+)
+
+```
+
+
+```{r}
+
+# build output table to match mlp csv structure
+bayes_results_export <- energy_2018[, c("country", "iso_code", target, "tier")]
+
+# use cv predictions as oof values
+bayes_results_export$oof_predicted <- energy_2018$cv_bayes_pred
+bayes_results_export$oof_residual <- energy_2018$cv_bayes_residual
+bayes_results_export$abs_residual <- abs(energy_2018$cv_bayes_residual)
+
+# use full manual-prior model predictions as final values
+bayes_results_export$final_predicted <- energy_2018$bayes_pred_mean_manual
+bayes_results_export$final_residual <- energy_2018$bayes_residual_manual
+
+# order columns exactly like mlp output
+bayes_results_export <- bayes_results_export[, c(
+  "country",
+  "iso_code",
+  target,
+  "oof_predicted",
+  "oof_residual",
+  "final_predicted",
+  "final_residual",
+  "abs_residual",
+  "tier"
+)]
+
+# save csv
+write.csv(
+  bayes_results_export,
+  "bayes_country_predictions.csv",
+  row.names = FALSE
+)
 
 ```
