@@ -1,4 +1,4 @@
-# DS4420 Final Project — Predicting National Renewable Energy Adoption
+# DS4420 Final Project - Predicting National Renewable Energy Adoption
 
 **DS 4420: Machine Learning and Data Mining 2 | Spring 2026**  
 Ved Agrawal · Ben Pierce · Miguel Gonzales
@@ -13,17 +13,17 @@ This project investigates what economic and structural factors determine a count
 
 We apply three complementary machine learning methods to the [Our World in Data World Energy Consumption dataset](https://ourworldindata.org/energy):
 
-1. **Manual MLP** — a from-scratch neural network that predicts renewable share from structural features and identifies anomalous countries via residual analysis
-2. **Bayesian Regression** — quantifies which features are reliable drivers of renewable adoption and with what degree of certainty
-3. **ARIMA Time Series** — applied to a five-country set motivated by the largest MLP residuals, examining whether structural anomalies are growing or shrinking through 2030
+1. **Manual MLP** - a from-scratch neural network that predicts renewable share from structural features and identifies anomalous countries via residual analysis
+2. **Bayesian Regression** - quantifies which features are reliable drivers of renewable adoption and with what degree of certainty
+3. **ARIMA Time Series** - applied to a five-country set motivated by the largest MLP residuals, examining whether structural anomalies are growing or shrinking through 2030
 
 ---
 
 ## Data
 
-**Source:** [Our World in Data — World Energy Consumption](https://ourworldindata.org/energy), also available via [Kaggle](https://www.kaggle.com/datasets/pralabhpoudel/world-energy-consumption).
+**Source:** [Our World in Data - World Energy Consumption](https://ourworldindata.org/energy), also available via [Kaggle](https://www.kaggle.com/datasets/pralabhpoudel/world-energy-consumption).
 
-The dataset consolidates country-level energy statistics from the BP Statistical Review of World Energy, the IEA, and Ember — covering 200+ countries and regions from 1900 to 2022 across 120+ variables.
+The dataset consolidates country-level energy statistics from the BP Statistical Review of World Energy, the IEA, and Ember - covering 200+ countries and regions from 1900 to 2022 across 120+ variables.
 
 **Final feature set (5 predictors):**
 
@@ -35,7 +35,7 @@ The dataset consolidates country-level energy statistics from the BP Statistical
 | `energy_per_gdp` | Energy consumption per unit of GDP |
 | `energy_per_capita` | Total primary energy consumption per capita |
 
-**Target:** `renewables_share_energy` — a country's share of total energy from renewables.
+**Target:** `renewables_share_energy` - a country's share of total energy from renewables.
 
 The 2018 cross-section was used for the MLP and Bayesian models (69 countries with complete data). ARIMA models use annual data from 1990–2022 for five selected countries.
 
@@ -43,7 +43,7 @@ The 2018 cross-section was used for the MLP and Bayesian models (69 countries wi
 
 ## Models
 
-### Model 1 — Manual MLP (Python / NumPy)
+### Model 1 - Manual MLP (Python / NumPy)
 
 A two-hidden-layer neural network implemented from scratch, without any deep learning framework.
 
@@ -54,9 +54,9 @@ A two-hidden-layer neural network implemented from scratch, without any deep lea
 - **Evaluation:** Stratified 5-fold cross-validation (by renewable share quartile)
 - **CV RMSE:** 9.03 ± 2.3 pp | **OOF R²:** 0.474
 
-Out-of-fold residuals are used to rank countries as over- or under-performers. The largest outliers — Brazil (+23.9 pp), Norway (+14.7 pp), Morocco (−28.2 pp), and Poland (−25.1 pp) — motivate the ARIMA analysis.
+Out-of-fold residuals are used to rank countries as over- or under-performers. The largest outliers - Brazil (+23.9 pp), Norway (+14.7 pp), Morocco (−28.2 pp), and Poland (−25.1 pp) - motivate the ARIMA analysis.
 
-### Model 2 — Bayesian Linear Regression (R / brms / Stan)
+### Model 2 - Bayesian Linear Regression (R / brms / Stan)
 
 A Bayesian regression fitted on the same 2018 cross-section, using weakly informative priors and four MCMC chains via Stan.
 
@@ -66,7 +66,7 @@ A Bayesian regression fitted on the same 2018 cross-section, using weakly inform
 
 Key findings: `gas_share_elec`, `coal_share_energy`, and `fossil_elec_per_capita` are credibly negative predictors. `energy_per_capita` is credibly positive. `energy_per_gdp` remains uncertain. The Bayesian model provides posterior probabilities of over/under-performance for each country, complementing the MLP residual analysis.
 
-### Model 3 — ARIMA Time Series (Python / pmdarima)
+### Model 3 - ARIMA Time Series (Python / pmdarima)
 
 Country-level ARIMA models trained on annual renewable share from 1990–2022 for five countries selected from the MLP residual ranking.
 
@@ -84,7 +84,7 @@ Selected orders: ARIMA(1,0,0) for Brazil, Norway, Morocco; ARIMA(0,2,1) for US; 
 
 ## Setup & Reproduction
 
-### Python — MLP & ARIMA
+### Python - MLP & ARIMA
 
 Requires **Python 3.11**.
 
@@ -104,11 +104,11 @@ python python/mlp_poc.py
 jupyter notebook Model3_ARIMA_Updated.ipynb
 ```
 
-### R — Bayesian Regression
+### R - Bayesian Regression
 
 Requires **R** with the following packages: `brms`, `tidyverse`, `posterior`, `bayesplot`.
 
-Stan is used as the backend sampler — see the [brms installation guide](https://paul-buerkner.github.io/brms/) for setup.
+Stan is used as the backend sampler - see the [brms installation guide](https://paul-buerkner.github.io/brms/) for setup.
 
 ```r
 # Open and knit the R Markdown file
