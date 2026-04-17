@@ -19,13 +19,6 @@ We apply three complementary machine learning methods to the [Our World in Data 
 
 ---
 
-## Repository Structure
-
-```
-```
-
----
-
 ## Data
 
 **Source:** [Our World in Data — World Energy Consumption](https://ourworldindata.org/energy), also available via [Kaggle](https://www.kaggle.com/datasets/pralabhpoudel/world-energy-consumption).
